@@ -1,0 +1,91 @@
+"""pseudocode for background subtraction"""
+
+# How to not detect background objects in the image that have similar contrasts
+# to animals? 
+# A threshold based approach will fail here...
+
+# Take advantage of animals moving against the background! 
+
+# 1. Take several frames at a given fps. 
+# for a given photo, K, we want to subtract its background 
+# such that only the animals' signal(s) remain. 
+
+# Consider a short series of m photos centred on K. 
+# i.e for m = 3 we take K-1, K, K+1. 
+
+# Focus on a pixel (i, j). Either it is occupied by immobile background
+# in all m photos, or it is occupied by a moving animal in at least one of
+# the m photos. 
+
+# It is most likely that at in at least one of the m photos, pixel (i, j) has 
+# "seen" the background (since animals are moving about). 
+
+# 2. Choose, for each pixel, the highest intensity recorded in the m photos. 
+# Since the animals are darker than the BG (i.e lower intensity), we are selecting
+# an instant when pixel (i, j) is occupied by the BG.
+
+# 3. Now we have an image of just the BG. Subtract this image from photo K and take
+# the absolute valeue of the intensity difference in each pixel. 
+
+# 4. Obtain an image of only the mobile targets standing out against a dark BG 
+# with zero intensity
+
+function: group_frames(m, centre_photo)   # a function to find series of m photos centred on K
+    locate the centre photo file
+    create a list of all the photos in a directory
+
+    # m must be odd number...
+    count back (m-1)/2 photos
+    save photo filename
+    count forward (m-1)/2 photos
+    save photo filename
+    if (m-1)/2 > 1:
+        # loop until all m photos are accounted for...
+        count back and forward (m-1)/2 + 1 photos
+        save those photo filenames
+
+    return filenames # in list form   !!should include the centre_photo in centre of list!!
+
+function: pixel(x,y, fname)    # returns the pixel values of the specified (x, y) pixel
+    # use PIL.Image library... 
+    im = Image.open('fname', 'r')
+    vals = im.getpixel((x,y))
+
+    return vals    # should return (R, G, B) intensity for that pixel
+
+function: find_max_intensity(m, centre_photo, x, y, channel='')   # for a given pixel in a series of m photos, find the max intensity value
+    # what colour channel are we working in?? 
+    if channel == "":
+        channel = "R"
+        index = 0
+    elif channel == "G":
+        index = 1
+    elif channel == "B":
+        index = 2
+    else: 
+        print("Unknown colour channel: {}".format(channel))
+
+    # get the filenames of all photos to analyse
+    function(group_frames(m, centre_photo))   # returns a list of all relevant filenames. 
+
+    iterate over all pixels in images and record the highest intensity for each one... 
+
+    return array of highest intensity values for all pixels.
+
+function: subtract_bg(centre_photo, intensity_array)
+    get pixel values for centre_photo
+    subtract highest intesity (BG) value from each pixel and take absolute value. 
+
+    # now have image of only the mobile targets against a dark BG of zero intensity. 
+
+
+
+    
+
+
+         
+
+
+    
+
+    
