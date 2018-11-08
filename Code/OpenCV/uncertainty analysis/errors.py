@@ -1,3 +1,4 @@
+from __future__ import division    # compatibility with python 2
 import numpy as np
 import cv2 as cv
 import random
@@ -69,52 +70,59 @@ def subGroupAverages(loadfile, numSubGroups, parameter=""):
 
 
     mu, std = norm.fit(averages)
+    # print("mean, std = ", mu, std)
     # remove outliers if further than 3 std from mean
-    averages = [x for x in averages if ((x > mu - 3*std) and (x < mu + 3*std))]
-    mu, std = norm.fit(averages)
+    averages2 = [x for x in averages if ((x > mu - 3*std) and (x < mu + 3*std))]
+    # print("The lowest x value is ", np.min(averages2))
+    # print("The highest x value is ", np.max(averages2))
 
-    plt.hist(averages, bins=100, density=True, edgecolor="k")
+    mu, std = norm.fit(averages2)
 
+    plt.hist(averages2, bins=70, density=True, edgecolor="k")
+    _, ymax = plt.ylim()
+    xmin, xmax = plt.xlim()
 
     print("mean is {}".format(mu))
     print("standard deviation is {}".format(std))
     print("Standard Error is {}\n".format(stdError))
-    xmin, xmax = plt.xlim()
     print("xmin, xmax = ", xmin, xmax)
 
     x = np.linspace(xmin, xmax, 1000)
     y = norm.pdf(x, mu, std)
     
-    plt.plot(x,y, linewidth=2)
+    plt.plot(x, y, linewidth=2, label="Gaussian Distribution")
+    plt.vlines(mu, 0, ymax, "g", linewidth=2, label="Mean={:.1g}".format(mu))
 
-    plt.ylabel(r"Probability Density")
+    plt.ylabel("Probability Density")
     plt.xlabel(parameter)
-    
+    plt.legend()
 
+    # plt.savefig("method_1_500_subgroups/{}_graph.png".format(parameter))
     plt.show()
 
 
     None
  
-#subGroupAverages(loadFile, 2000, "newcys")
+
 
 # reference paramaters computed from 150 randomly selected reference images
 # ... see calculate camera intrinsics jupyter notebook 
 # ... in videotest folder
+# Process took ~33 minutes! 
 referenceDict = {
-"ref_fx" : 1.87328075e+03,
-"ref_fy" : 1.87411535e+03,
-"ref_cx" : 9.68886059e+02,
-"ref_cy" : 5.49519121e+02,
-"ref_k1" :  1.20516762e-01,
-"ref_k2" : 1.18944527e-01,
-"ref_k3" : -1.34833637e+00,
-"ref_p1" : 2.52464884e-03,
-"ref_p2" : -4.75592880e-04,
-"ref_opt_fx" : 1.86776758e+03,
-"ref_opt_fy" : 1.87207007e+03,
-"ref_opt_cx" : 9.69674507e+02,
-"ref_opt_cy" : 5.52861470e+02,
+"ref_fx" : 1.87275285e+03,
+"ref_fy" : 1.87696998e+03,
+"ref_cx" : 9.75764866e+02,
+"ref_cy" : 5.42590101e+02,
+"ref_k1" :   1.58175072e-01,
+"ref_k2" : -6.59545156e-01,
+"ref_k3" :  1.87636309e+00,
+"ref_p1" : 1.10951578e-03,
+"ref_p2" : -7.72102192e-04,
+"ref_opt_fx" : 1.92431360e+03,
+"ref_opt_fy" : 1.89481995e+03,
+"ref_opt_cx" : 9.73515460e+02,
+"ref_opt_cy" : 5.43054368e+02,
 }
 
 def getPoints(pointfile, groupSize):
@@ -181,40 +189,89 @@ def getDistortionCoefs(distCoefs):
     return k1, k2, p1, p2, k3 
 
 
-def compareSample(pointfile, groupSize, repetitions,  image_width, image_height, parameter=""):
-    if parameter == "":
-        parameter = "cx"
-
+def compareSample(pointfile, groupSize, repetitions,  image_width, image_height, indexes):
     # extract object points and image points from pointfile
-    objp, imgp = getObjpImgp(pointfile)    
+    objpoints, imgpoints = getObjpImgp(pointfile)
 
-    # get the reference parameter value from dictionary
-    refParameter = referenceDict["ref_"+parameter]
+    # use the correct img points, use only indexes used for ref_parameters
+    objp, imgp = [], []
+    for i in range(len(indexes)):
+        objp.append(objpoints[indexes[i]])
+        imgp.append(imgpoints[indexes[i]])    
 
     # array to store parameter values over various repetitions
-    xs = np.zeros(repetitions)
+    fxs = np.zeros(repetitions)
+    fys = np.zeros(repetitions)
+    newfxs = np.zeros(repetitions)
+    newfys = np.zeros(repetitions)
+    cxs = np.zeros(repetitions)
+    cys = np.zeros(repetitions)
+    newcxs = np.zeros(repetitions)
+    newcys = np.zeros(repetitions)
+    k1s = np.zeros(repetitions)
+    k2s = np.zeros(repetitions)
+    k3s = np.zeros(repetitions)
+    p1s = np.zeros(repetitions)
+    p2s = np.zeros(repetitions)
+
+    # need to output all the parameters, and save to file to make
+    # analysis more efficient, rather than running this function 
+    # separately for each parameter...
 
     for i in range(repetitions):
-        if i%3 == 0:
-            dots = "..."
-        elif i%2 == 0: 
-            dots = ".."
-        else:
-            dots = "."
-        sys.stdout.write("\r"+"{:.1f} % Complete{}".format(i/repetitions * 100, dots))
+        sys.stdout.write("\r"+"{:.1f} % Complete".format(i/repetitions * 100))
         camera_matrix, newcameramtx, dist_coefs, rvecs, tvecs = generateMTX(pointfile, groupSize, 
                                                                             image_width, image_height)
 
         # extract camera parameters from matrices ^^                               
-        fx, fy, cx, cy, opt_fx, opt_fy, opt_cx, opt_cy = getCameraIntrinsics(camera_matrix, newcameramtx)
-        k1, k2, p1, p2, k3 = getDistortionCoefs(dist_coefs)
+        fxs[i], fys[i], cxs[i], cys[i], newfxs[i], newfys[i], newcxs[i], newcys[i] = getCameraIntrinsics(camera_matrix, newcameramtx)
+        k1s[i], k2s[i], p1s[i], p2s[i], k3s[i] = getDistortionCoefs(dist_coefs)
 
-        # dictionary of parameters
-        parameterDict = {"fx":fx, "fy":fy, "cx":cx, "cy":cy, "newfx":opt_fx, "newfy":opt_fy, 
-                        "newcx": opt_cx, "newcy":opt_cy, "k1":k1, "k2":k2, "k3":k3, "p1":p1, 
-                        "p2":p2,}
+    # save the parameter arrays for future use...
+    savefile = "parameters_method_2_({}_repetitions).npz".format(repetitions)
+    np.savez(savefile, fxs=fxs, fys=fys, newfxs=newfxs, newfys=newfys,
+            cxs=cxs, cys=cys, newcxs=newcxs, newcys=newcys, k1s=k1s,
+            k2s=k2s, k3s=k3s, p1s=p1s, p2s=p2s)
 
-        xs[i] = parameterDict[parameter]
+
+    
+
+
+
+def Method2(savefile, parameter=""):
+    if parameter == "":
+        parameter = "cx"
+
+    # get the reference parameter value from dictionary
+    if (parameter == "newcx" or parameter == "newfx" or parameter == "newfy" or parameter == "newcy"):
+        refParameter = referenceDict["ref_opt_"+parameter[3:]]
+    else:
+        refParameter = referenceDict["ref_"+parameter]
+
+    npzfile = np.load(savefile)
+    
+    # extract the arrays
+    cxs = npzfile["cxs"]
+    cys = npzfile["cys"]
+    newcxs = npzfile["newcxs"]
+    newcys = npzfile["newcys"]
+    fxs = npzfile["fxs"]
+    fys = npzfile["fys"]
+    newfxs = npzfile["newfxs"]
+    newfys = npzfile["newfys"]
+    k1s = npzfile["k1s"]
+    k2s = npzfile["k2s"]
+    k3s = npzfile["k3s"]
+    p1s = npzfile["p1s"]
+    p2s = npzfile["p2s"]
+
+
+    parameterDict = {"fx":fxs, "fy":fys, "cx":cxs, "cy":cys, "newfx":newfxs, "newfy":newfys, 
+                    "newcx": newcxs, "newcy":newcys, "k1":k1s, "k2":k2s, "k3":k3s, "p1":p1s, 
+                    "p2":p2s,}
+
+    
+    xs = parameterDict[parameter]
 
     mu, std = norm.fit(xs)
     # remove outliers
@@ -225,20 +282,50 @@ def compareSample(pointfile, groupSize, repetitions,  image_width, image_height,
 
     # plot histogram of parameter
     plt.hist(newxs, bins=70, density=True, edgecolor="k")
-    ymin, ymax = plt.ylim()
-    plt.vlines(refParameter, 0, ymax, "r", linewidth=2)
+    _, ymax = plt.ylim()
+    plt.vlines(refParameter, 0, ymax, "r", linewidth=2, label="Reference Value = {:.2g}".format(refParameter))
+    plt.vlines(mu, 0, ymax, "g", linewidth=2, label="Mean = {:.2g}".format(mu))
+
     xmin, xmax = plt.xlim()
     x = np.linspace(xmin, xmax, 1000)
     y = norm.pdf(x, mu, std)
 
-    plt.plot(x, y, "o-")
+    plt.plot(x, y, color="m", ls="-", label="Gaussian Distribution")
 
-    plt.show()
+    plt.xlabel(parameter+"s")
+    plt.ylabel("Probability Density")
 
-compareSample(pointFile, 10, 1000, 1920, 1080, "cx")
-            
+    plt.legend()
+
+    plt.savefig("method_2_30000_graphs/{}_graph.png".format(parameter))
+
+    return None
+
+indexes = [275, 419, 492, 186, 622, 593, 529, 311, 285, 23, 129, 52, 379, 28, 193, 257, 301, 413, 581, 366, 602, 108, 230, 594, 483, 20, 8, 391, 584, 368, 380, 18, 167, 539, 446, 223, 502, 184, 515, 97, 162, 248, 355, 267, 22, 277, 151, 148, 172, 417, 47, 137, 219, 424, 133, 369, 24, 143, 261, 241, 244, 211, 300, 75, 385, 48, 509, 209, 99, 367, 128, 329, 527, 500, 94, 489, 64, 253, 378, 158, 19, 120, 119, 302, 232, 181, 605, 501, 436, 173, 316, 190, 388, 592, 123, 477, 389, 114, 472, 60, 595, 571, 63, 349, 441, 213, 608, 503, 67, 530, 351, 287, 523, 458, 202, 87, 269, 357, 603, 273, 387, 53, 332, 370, 227, 256, 418, 161, 263, 242, 614, 34, 433, 92, 610, 194, 507, 476, 442, 462, 68, 469, 583, 364, 45, 451, 513, 252, 416, 564, 175, 381, 309, 212, 0, 260, 350, 132, 578, 521, 562, 536, 473, 444, 390, 296, 558, 326, 214, 286, 518, 305, 243, 203, 168, 327, 89, 236, 38, 40, 557, 438, 96, 588, 428, 131, 330, 609, 611, 101, 488, 84, 113, 526, 125, 189, 589, 375, 467, 117]
+
+# compareSample(pointFile, 10, 30000, 1920, 1080, indexes)
+
+savefile = "parameters_method_2_(30000_repetitions).npz"
+
+parameters = ["fx", "fy", "cx", "cy", "newfx", "newfy", 
+                    "newcx", "newcy", "k1", "k2", "k3", "p1", 
+                    "p2"]
 
 
+# METHOD 1
+for parameter in parameters:
+    if parameter == "k2" or parameter == "k3":
+        pass
+    else:
+        parameter += "s"
+        subGroupAverages(loadFile, 500, parameter)
+
+# subGroupAverages(loadFile, 2000, "k2s")
+
+
+# METHOD 2
+# for parameter in parameters:
+#     Method2(savefile, parameter)
 
 
 
